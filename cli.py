@@ -10,7 +10,7 @@ app = typer.Typer()
 console = Console()
 
 @app.command()
-def enqueue(task_name:str, args_json:str = '{}'):
+def enqueue(task_name:str, args_json:str = typer.Argument('{}')):
     """
     Enfileira uma nova tarefa no Redis.
 
