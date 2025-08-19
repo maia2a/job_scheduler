@@ -30,11 +30,11 @@ def main():
                 print(f"✅ Tarefa '{task_name}' concluída com sucesso. Resultado: {result}")
             else:
                 print(f"❌ Tarefa '{task_name}' não reconhecida.")
-          except redis.exceptions.ConnectionError as e:
+        except redis.exceptions.ConnectionError as e:
             print(f"🚨 Erro de conexão com o Redis: {e}. Tentando reconectar em 5 segundos...")
             time.sleep(5)
-          except Exception as e:
+        except Exception as e:
             print(f"🔥 Ocorreu um erro inesperado ao processar a tarefa: {e}")
   
-  if __name__ == "__main__":
-    main()
+if __name__ == "__main__":
+  main()

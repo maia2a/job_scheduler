@@ -1,7 +1,7 @@
 import typer
 import redis
 import json
-from rich_console import Console
+from rich.console import Console
 
 r = redis.Redis(host='localhost', port=6379, decode_responses=True)
 QUEUE_NAME = 'task_queue'
