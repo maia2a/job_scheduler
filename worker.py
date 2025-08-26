@@ -1,5 +1,6 @@
 import redis
 import json
+import os
 
 import redis.exceptions
 import tasks
@@ -20,7 +21,9 @@ AVAILABLE_TASKS = {
 }
 
 def make_redis_client() -> redis.Redis:
-    return redis.Redis(host='localhost', port=6379, decode_responses=True)
+    host = os.getenv("REDIS_HOST", "redis")
+    port = int(os.getenv("REDIS_PORT", "6379"))
+    return redis.Redis(host=host, port=port, decode_responses=True)
 
 running = True
 
