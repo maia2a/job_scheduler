@@ -3,168 +3,175 @@
 ![Python Version](https://img.shields.io/badge/python-3.10%2B-blue)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)
 
-Um sistema de backend distribuído, construído em Python, para agendamento e execução de tarefas (jobs) de forma confiável e tolerante a falhas. O projeto é inspirado em sistemas como Celery e Sidekiq, focado em demonstrar conceitos avançados de engenharia de software.
+Sistema em Python para agendamento e execução de tarefas (jobs) de forma distribuída e tolerante a falhas. Projeto educativo/prático inspirado em soluções como Celery/Sidekiq.
 
-## Problema Solucionado
+Principais mudanças recentes
 
-Empresas frequentemente precisam executar tarefas em background que são essenciais, mas não devem travar a experiência do usuário: enviar emails de marketing à meia-noite, gerar relatórios complexos a cada 6 horas, fazer backups de bancos de dados diariamente, etc. Este sistema fornece uma plataforma robusta para que desenvolvedores possam agendar essas tarefas com a garantia de que elas serão executadas na hora certa e de forma confiável, mesmo que servidores falhem.
+- CLI (cli.py): aceita JSON passado em uma única string, aceita múltiplos tokens (junta automaticamente) e também suporta `--file / -f payload.json`.
+- Worker (worker.py): conexão resiliente com Redis (backoff), shutdown gracioso por sinais, logging estruturado e tratamento de exceções.
+- Scheduler (scheduler.py): agora lê jobs do PostgreSQL, enfileira no Redis, atualiza next_run_at com `croniter`, usa db.init_pool/close_pool para o pool de conexões.
+- Database (database.py): pool (ThreadedConnectionPool) com retries, context manager para conexões, helpers execute/fetch_one/fetch_all.
+- Docker: docker-compose atualizado para desenvolvimento com Redis + Postgres + serviços app/worker. Serviços leem variáveis via `.env` (REDIS*HOST/REDIS_PORT, DB*\*).
 
-## Principais Recursos Técnicos
+Conteúdo
 
-- ✅ **Execução Distribuída:** Múltiplos workers podem ser executados em paralelo em diferentes máquinas ou contêineres para processar a fila de tarefas.
-- ✅ **Agendamento de Tarefas:** Jobs podem ser configurados para executar em horários específicos ou em intervalos recorrentes (ex: CRON jobs).
-- ✅ **Tolerância a Falhas:** Mecanismos como heartbeats e locks distribuídos garantem que a falha de um worker não resulte na perda de uma tarefa.
-- ✅ **Garantias de Execução:** Implementação de estratégias como "at least once" para assegurar a execução de tarefas críticas.
-- ✅ **Alta Disponibilidade (HA) do Scheduler:** Um mecanismo de eleição de líder (Leader Election) previne que múltiplos schedulers dupliquem tarefas.
-- ✅ **Interface de Linha de Comando (CLI):** Uma CLI robusta para submeter novos jobs, verificar status e gerenciar o sistema.
+- cli.py — interface Typer para enfileirar tarefas e gerenciar o sistema.
+- worker.py — consome a fila Redis e executa tasks em tasks.py.
+- scheduler.py — agendador que lê jobs do Postgres e enfileira conforme cron.
+- database.py — helpers e pool para Postgres.
+- tasks.py — implementações de tarefas (send_email, generate_report).
+- docker-compose.yml — ambiente Dev (Redis + Postgres + app/worker).
+- requirements.txt — dependências Python.
 
-## Arquitetura do Sistema
-
-O sistema é composto por múltiplos componentes desacoplados que se comunicam através de um broker de mensagens e um banco de dados, seguindo padrões de arquitetura de microsserviços.
-
-![Diagrama da Arquitetura](https://i.imgur.com/iY9A6kY.png)
-
-1.  **CLI (Cliente)**: Interface para o usuário definir e agendar jobs.
-2.  **Banco de Dados (PostgreSQL)**: Persiste as definições dos jobs, o histórico de execuções e os resultados.
-3.  **Scheduler (Agendador)**: O cérebro do sistema. Lê as definições do banco de dados, determina quais jobs devem ser executados e os enfileira no broker.
-4.  **Broker (Redis)**: Atua como a fila de tarefas, garantindo a comunicação assíncrona entre o Scheduler e os Workers.
-5.  **Workers (Trabalhadores)**: Consomem as tarefas da fila, executam a lógica de negócio e reportam o resultado.
-
-## Tech Stack
-
-| Componente               | Tecnologia                                  |
-| ------------------------ | ------------------------------------------- |
-| **Linguagem**            | Python 3.10+ (com `asyncio`)                |
-| **Banco de Dados**       | PostgreSQL                                  |
-| **Broker de Mensagens**  | Redis                                       |
-| **Comunicação Direta**   | gRPC (para controle do Scheduler -> Worker) |
-| **CLI Framework**        | Typer                                       |
-| **Ambiente de Execução** | Docker & Docker Compose                     |
-
-## Começando (Getting Started)
-
-Siga os passos abaixo para executar o projeto em seu ambiente local.
-
-### Pré-requisitos
+Pré-requisitos
 
 - Git
-- Python 3.10 ou superior
-- Docker e Docker Compose
+- Python 3.10+
+- Docker & Docker Compose (opcional: Homebrew para instalar Redis/Postgres localmente)
+- No macOS/fish: atenção ao ativar venv (veja nota abaixo)
 
-### Instalação
+Exemplo de .env (crie na raiz)
 
-1.  **Clone o repositório:**
+```env
+# filepath: /Users/biellgm_/projects/job_scheduler/.env
+REDIS_HOST=redis
+REDIS_PORT=6379
 
-    ```bash
-    git clone <URL_DO_SEU_REPOSITORIO>
-    cd job_scheduler
-    ```
+DB_NAME=scheduler_db
+DB_USER=admin
+DB_PASSWORD=admin
+DB_HOST=postgres
+DB_PORT=5432
 
-2.  **Crie e ative o ambiente virtual:**
-
-    ```bash
-    python -m venv venv
-    source venv/bin/activate
-    # No Windows: venv\Scripts\activate
-    ```
-
-3.  **Instale as dependências Python:**
-
-    ```bash
-    pip install -r requirements.txt
-    ```
-
-4.  **Inicie os serviços de infraestrutura (Redis & Postgres):**
-    Crie um arquivo `docker-compose.yml` na raiz do projeto com o seguinte conteúdo:
-
-    ```yaml
-    version: "3.8"
-    services:
-      redis:
-        image: "redis:7-alpine"
-        ports:
-          - "6379:6379"
-        volumes:
-          - redis_data:/data
-
-      # Adicionaremos o Postgres em fases futuras
-      # postgres:
-      #   image: postgres:15-alpine
-      #   environment:
-      #     - POSTGRES_USER=admin
-      #     - POSTGRES_PASSWORD=admin
-      #     - POSTGRES_DB=scheduler_db
-      #   ports:
-      #     - "5432:5432"
-      #   volumes:
-      #     - postgres_data:/var/lib/postgresql/data
-
-    volumes:
-      redis_data:
-      # postgres_data:
-    ```
-
-    Agora, inicie os containers com um único comando:
-
-    ```bash
-    docker-compose up -d
-    ```
-
-### Execução
-
-1.  **Inicie um Worker:**
-    Abra um terminal, ative o ambiente virtual e execute:
-
-    ```bash
-    python worker.py
-    ```
-
-    O worker ficará aguardando por novas tarefas.
-
-2.  **Enfileire uma Tarefa via CLI:**
-    Abra um **segundo terminal**, ative o ambiente virtual e use a CLI para enviar uma tarefa:
-
-    ```bash
-    # Exemplo 1: Enviar um email
-    python cli.py enqueue send_email '{"email": "exemplo@email.com", "message": "Olá, Mundo!"}'
-
-    # Exemplo 2: Gerar um relatório
-    python cli.py enqueue generate_report '{"report_type": "vendas_Q3", "filters": {}}'
-    ```
-
-    Observe o primeiro terminal para ver o worker processando a tarefa em tempo real.
-
-## Estrutura do Projeto
-
-```
-.
-├── venv/                 # Ambiente virtual Python
-├── cli.py                # Implementação da Interface de Linha de Comando
-├── worker.py             # Lógica do worker para processar tarefas
-├── tasks.py              # Definições das tarefas executáveis
-├── scheduler.py          # (Futuro) Lógica do serviço de agendamento
-├── requirements.txt      # Dependências Python
-└── docker-compose.yml    # Definição dos serviços de infraestrutura
+QUEUE_NAME=task_queue
+SLEEP_INTERVAL=10
 ```
 
-## Roadmap do Projeto
+Instalação local (sem Docker)
 
-- [x] **Fase 1: Esqueleto Funcional (MVP)**
-  - [x] Comunicação via Redis entre CLI e Worker.
-  - [x] Execução de tarefas simples.
-- [ ] **Fase 2: Persistência e Agendamento**
-  - [ ] Integração com PostgreSQL.
-  - [ ] Implementação do serviço do Scheduler para ler do DB e enfileirar tarefas.
-  - [ ] CLI para criar/atualizar definições de jobs no DB.
-- [ ] **Fase 3: Tolerância a Falhas**
-  - [ ] Implementação de distributed locks (Redis `SETNX`) para evitar dupla execução.
-  - [ ] Mecanismo de heartbeat/timeout para detectar workers mortos e re-enfileirar tarefas.
-- [ ] **Fase 4: Alta Disponibilidade (HA)**
-  - [ ] Implementação de Leader Election para o Scheduler.
-- [ ] **Fase 5: Funcionalidades Avançadas**
-  - [ ] Comunicação via gRPC para cancelamento de tarefas.
-  - [ ] Dashboard web simples para visualização.
+1. Criar e ativar venv
 
-## Licença
+- macOS (bash/zsh):
 
-Este projeto está sob a licença MIT. Veja o arquivo `LICENSE` para mais detalhes.
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+- fish (atenção à sintaxe):
+
+```fish
+python3 -m venv venv
+# ative com o script para fish
+source venv/bin/activate.fish
+```
+
+2. Instalar dependências
+
+```bash
+pip install -r requirements.txt
+# se usar psycopg2 sem binário:
+# pip install psycopg2-binary
+```
+
+3. Iniciar infra (opções)
+
+- Docker Compose (recomendado para dev):
+
+```bash
+docker compose up --build -d
+```
+
+- Local (Homebrew):
+
+```bash
+brew install redis postgresql
+brew services start redis
+brew services start postgresql
+# inicialize DB e credenciais conforme .env
+```
+
+Inicializar banco (uma vez)
+
+```bash
+# o módulo database.py tem init_db() quando executado diretamente
+python3 database.py
+```
+
+Executando localmente
+
+- Iniciar Worker:
+
+```bash
+python3 worker.py
+```
+
+- Iniciar Scheduler:
+
+```bash
+python3 scheduler.py
+```
+
+- Enfileirar tarefas via CLI (exemplos válidos)
+  - JSON em uma linha (recomendado):
+  ```bash
+  python3 cli.py enqueue send_email '{"email":"junior.dev@empresa.com","message":"Sua primeira tarefa distribuída!"}'
+  ```
+  - Forçar resto como único argumento (útil quando o shell quebra tokens):
+  ```bash
+  python3 cli.py enqueue send_email -- '{"email":"junior.dev@empresa.com","message":"..."}'
+  ```
+  - Usar arquivo JSON (multilinha):
+  ```bash
+  python3 cli.py enqueue send_email -f payload.json
+  ```
+  Observações:
+  - A CLI aceita múltiplos tokens para o JSON e junta-os caso você quebre linhas inadvertidamente.
+  - A CLI valida que kwargs sejam um objeto JSON (dict). Mensagens de erro são mais informativas agora.
+
+Executando com Docker Compose
+
+- Subir tudo:
+
+```bash
+docker compose up --build -d
+```
+
+- Rodar o worker via compose:
+
+```bash
+docker compose up --build worker
+```
+
+- Usar a CLI dentro do container (mantém variáveis de ambiente do compose):
+
+```bash
+docker compose run --rm scheduler python3 cli.py enqueue send_email '{"email":"a@b.com","message":"Oi"}'
+```
+
+Boas práticas e observações
+
+- O código agora lê REDIS*HOST/REDIS_PORT e DB*\* via env — garanta que `.env` esteja correto ao usar Docker Compose.
+- Em desenvolvimento no macOS, monte o volume com :delegated para melhor desempenho (configurado no docker-compose recomendado).
+- Para produção, use imagens imutáveis (não monte o código) e gerencie segredos com mecanismos seguros.
+- Os serviços implementam reconexão com backoff (worker/scheduler) — designs tolerantes a falhas por intenção.
+- Para testes e desenvolvimento reduza parâmetros pesados (ex.: total_iterations) em tasks.generate_report.
+
+Dependências principais (exemplo requirements.txt)
+
+```
+redis
+typer[all]
+rich
+croniter
+psycopg2-binary
+```
+
+Contribuição e roadmap
+
+- Veja o roadmap no final do README original: HA, leader election, distributed locks, heartbeat, métricas e dashboard são próximos itens do projeto.
+
+Licença
+MIT — consulte LICENSE.
+
+Se quiser, atualizo o docker-compose.yml e requirements.txt no repositório para refletir estas
